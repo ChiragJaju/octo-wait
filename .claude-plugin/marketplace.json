@@ -1,0 +1,14 @@
+{
+  "name": "oswald-marketplace",
+  "owner": {
+    "name": "Arnav Borkar",
+    "email": "arnav@e6x.io"
+  },
+  "plugins": [
+    {
+      "name": "oswald-while-you-wait",
+      "source": "./claude-plugin",
+      "description": "Plays Oswald episodes from a YouTube playlist while Claude works, pausing (and resuming where it left off) when Claude stops."
+    }
+  ]
+}

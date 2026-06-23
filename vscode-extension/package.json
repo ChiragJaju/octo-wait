@@ -1,0 +1,50 @@
+{
+  "name": "oswald-while-you-wait",
+  "displayName": "Oswald — While You Wait",
+  "description": "Plays Oswald episodes from a YouTube playlist while your AI assistant is working, and pauses (resuming where it left off) when it stops.",
+  "version": "1.0.0",
+  "publisher": "arnav",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      { "command": "oswald.show", "title": "Oswald: Show Player Panel" },
+      { "command": "oswald.play", "title": "Oswald: Play (manual)" },
+      { "command": "oswald.pause", "title": "Oswald: Pause (manual)" },
+      { "command": "oswald.toggle", "title": "Oswald: Toggle Play/Pause" },
+      { "command": "oswald.startServer", "title": "Oswald: Start Control Server" },
+      { "command": "oswald.stopServer", "title": "Oswald: Stop Control Server" }
+    ],
+    "configuration": {
+      "title": "Oswald — While You Wait",
+      "properties": {
+        "oswald.port": {
+          "type": "number",
+          "default": 8730,
+          "description": "Port for the local control server (must match the Claude Code plugin's OSWALD_PORT)."
+        },
+        "oswald.playlistId": {
+          "type": "string",
+          "default": "PLJOUQWZHQRPvbWKl4YgrEcs7kazppKoFR",
+          "description": "YouTube playlist ID to play (the part after list= in the URL)."
+        },
+        "oswald.autostartServer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start the control server automatically when VSCode launches."
+        },
+        "oswald.autoShowPanel": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the player panel on startup."
+        }
+      }
+    }
+  }
+}

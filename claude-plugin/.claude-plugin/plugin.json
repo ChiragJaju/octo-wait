@@ -1,0 +1,10 @@
+{
+  "name": "oswald-while-you-wait",
+  "version": "1.0.0",
+  "description": "Plays Oswald episodes from a YouTube playlist while Claude is working, and pauses (resuming exactly where it left off) the moment Claude stops.",
+  "author": {
+    "name": "Arnav Borkar",
+    "email": "arnav@e6x.io"
+  },
+  "keywords": ["fun", "ambient", "video", "youtube", "hooks", "oswald"]
+}

@@ -1,0 +1,17 @@
+# dependencies / build
+node_modules/
+*.vsix
+dist/
+out/
+
+# os / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode-test/
+
+# runtime state written by the server
+.oswald-while-you-wait/
+state.json
+*.log

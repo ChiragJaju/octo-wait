@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Oswald — while you wait</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b1020; color: #e6ecff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  #wrap { display: flex; flex-direction: column; height: 100%; }
+  #bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    background: #111833; border-bottom: 1px solid #1d2748; font-size: 13px; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: #4b5572; flex: 0 0 auto; }
+  #dot.playing { background: #38d39f; box-shadow: 0 0 8px #38d39f; }
+  #dot.paused  { background: #f0a64a; }
+  #status { font-weight: 600; }
+  #title { color: #9fb0d8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #spacer { flex: 1; }
+  #stage { position: relative; flex: 1; min-height: 0; background: #000; }
+  #player { width: 100%; height: 100%; }
+  #overlay { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px; background: rgba(8,12,28,0.92);
+    text-align: center; padding: 24px; z-index: 5; }
+  #overlay h1 { font-size: 20px; margin: 0; }
+  #overlay p { margin: 0; color: #9fb0d8; max-width: 460px; line-height: 1.5; font-size: 14px; }
+  #arm { appearance: none; border: 0; border-radius: 999px; padding: 12px 26px;
+    font-size: 15px; font-weight: 700; cursor: pointer; background: #38d39f; color: #06241a; }
+  #arm:hover { filter: brightness(1.06); }
+  .hidden { display: none !important; }
+  .pill { font-size: 11px; color: #7f8db5; border: 1px solid #243056; border-radius: 999px; padding: 2px 8px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bar">
+    <span id="dot" class="paused"></span>
+    <span id="status">Idle</span>
+    <span id="title"></span>
+    <span id="spacer"></span>
+    <span class="pill" id="conn">connecting…</span>
+  </div>
+  <div id="stage">
+    <div id="player"></div>
+    <div id="overlay">
+      <h1>🐙 Oswald is ready</h1>
+      <p>Browsers block auto-play until you interact once. Click below to arm the
+         player. After that, episodes start automatically whenever the AI is
+         working, and pause when it's done — picking up right where they left off.</p>
+      <button id="arm">Click to arm ▶</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---- runtime state ----
+  var player = null;
+  var ready = false;
+  var armed = false;
+  var playlistId = null;
+  var lastServerPlaying = null;
+  var POLL_MS = 700;
+  var REPORT_MS = 3000;
+
+  var dot = document.getElementById('dot');
+  var statusEl = document.getElementById('status');
+  var titleEl = document.getElementById('title');
+  var connEl = document.getElementById('conn');
+  var overlay = document.getElementById('overlay');
+  var armBtn = document.getElementById('arm');
+
+  function api(path, opts) {
+    return fetch(path, Object.assign({ cache: 'no-store' }, opts || {}))
+      .then(function (r) { return r.json(); });
+  }
+
+  // ---- bootstrap: get playlist id + last resume position, then load API ----
+  Promise.all([api('/config'), api('/state')]).then(function (res) {
+    var cfg = res[0], st = res[1];
+    playlistId = cfg.playlistId;
+    window.__resume = (st && st.resume) || { index: 0, time: 0 };
+    loadYouTubeAPI();
+  }).catch(function () {
+    connEl.textContent = 'server offline';
+  });
+
+  function loadYouTubeAPI() {
+    var tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+
+  // YouTube calls this global when the IFrame API is ready.
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player('player', {
+      width: '100%',
+      height: '100%',
+      playerVars: {
+        autoplay: 0,
+        controls: 1,
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1,
+        origin: location.origin
+      },
+      events: {
+        onReady: onPlayerReady,
+        onStateChange: onPlayerStateChange,
+        onError: onPlayerError
+      }
+    });
+  };
+
+  function onPlayerReady() {
+    ready = true;
+    var r = window.__resume || { index: 0, time: 0 };
+    // Cue (load but do not play) the playlist at the saved position.
+    player.cuePlaylist({
+      listType: 'playlist',
+      list: playlistId,
+      index: r.index || 0,
+      startSeconds: r.time || 0
+    });
+    startLoops();
+  }
+
+  function onPlayerError() {
+    titleEl.textContent = '(playlist error — check the list ID / network)';
+  }
+
+  function onPlayerStateChange() {
+    updateTitle();
+    // Report immediately on meaningful transitions so resume is accurate.
+    reportPosition();
+  }
+
+  function updateTitle() {
+    try {
+      var d = player.getVideoData && player.getVideoData();
+      if (d && d.title) titleEl.textContent = '— ' + d.title;
+    } catch (_) {}
+  }
+
+  // ---- arming (one-time user gesture to satisfy autoplay policy) ----
+  armBtn.addEventListener('click', function () {
+    armed = true;
+    overlay.classList.add('hidden');
+    // This click is the gesture that unlocks programmatic playback.
+    try { player.playVideo(); } catch (_) {}
+    // Immediately reconcile with the server's desired state.
+    setTimeout(syncOnce, 50);
+  });
+
+  // ---- main loops ----
+  function startLoops() {
+    syncOnce();
+    setInterval(syncOnce, POLL_MS);
+    setInterval(reportPosition, REPORT_MS);
+    window.addEventListener('beforeunload', reportPosition);
+  }
+
+  function syncOnce() {
+    api('/state').then(function (st) {
+      connEl.textContent = 'connected';
+      var want = !!st.playing;
+      reflectStatus(want);
+      if (!ready || !armed) return;
+
+      var ps = player.getPlayerState(); // 1 playing, 2 paused, 3 buffering, -1 unstarted, 5 cued
+      if (want) {
+        if (ps !== YT.PlayerState.PLAYING && ps !== YT.PlayerState.BUFFERING) {
+          player.playVideo();
+        }
+      } else {
+        if (ps === YT.PlayerState.PLAYING || ps === YT.PlayerState.BUFFERING) {
+          player.pauseVideo();
+          reportPosition(); // capture the exact pause point
+        }
+      }
+      lastServerPlaying = want;
+    }).catch(function () {
+      connEl.textContent = 'server offline';
+    });
+  }
+
+  function reflectStatus(playing) {
+    if (playing) {
+      dot.className = 'playing';
+      statusEl.textContent = armed ? 'AI is working — playing' : 'AI is working (click to arm)';
+    } else {
+      dot.className = 'paused';
+      statusEl.textContent = 'Idle — paused';
+    }
+  }
+
+  function reportPosition() {
+    if (!ready) return;
+    try {
+      var index = player.getPlaylistIndex();
+      var time = player.getCurrentTime();
+      if (index == null || index < 0) return;
+      navigator.sendBeacon
+        ? navigator.sendBeacon('/position', JSON.stringify({ index: index, time: time }))
+        : fetch('/position', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: index, time: time }),
+            keepalive: true
+          });
+    } catch (_) {}
+  }
+})();
+</script>
+</body>
+</html>
