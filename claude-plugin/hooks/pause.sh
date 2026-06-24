@@ -4,4 +4,7 @@
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 oswald_enabled || exit 0
 server_up && post pause
+if [ "${1:-}" = "--focus" ]; then
+  focus_terminal       # snap back to the terminal you started from
+fi
 exit 0

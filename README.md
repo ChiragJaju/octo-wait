@@ -4,6 +4,11 @@ Plays **Oswald** episodes from a YouTube playlist while your AI assistant is bus
 working on a prompt, and **pauses the instant it stops** — picking up the next
 time from the exact frame it left off.
 
+![octo-wait demo](assets/demo.gif)
+
+> *Oswald plays while Claude works, and pauses — picking up right where it left off —
+> the moment it's done. ([full-quality video](assets/demo.mp4))*
+
 Ships as **both**:
 
 - a **Claude Code plugin** (the "brain" — knows when the AI is working, via hooks), and

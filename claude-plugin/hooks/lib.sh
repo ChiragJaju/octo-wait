@@ -9,6 +9,8 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$HOOK_DIR/.." && pwd)}"
 SERVER_JS="$PLUGIN_ROOT/player/server.js"
 OSWALD_DATA_DIR="${OSWALD_DATA_DIR:-$HOME/.oswald-while-you-wait}"
+TERM_FILE="$OSWALD_DATA_DIR/terminal-app"
+case "$(uname -s)" in Darwin) IS_MAC=true;; *) IS_MAC=false;; esac
 
 # Master on/off switch. Returns non-zero (disabled) when either:
 #   - OSWALD_DISABLED=1 is set in the environment, or
@@ -62,4 +64,53 @@ open_viewer_once() {
 # Fire a control command at the server (play / pause / toggle). Never blocks long.
 post() {
   curl -s -m 0.6 -X POST "$OSWALD_URL/$1" >/dev/null 2>&1 || true
+}
+
+# ---- window focus (macOS only) --------------------------------------------
+# Enabled by default; set OSWALD_FOCUS=0 to disable the focus-switching.
+focus_on() { [ "${OSWALD_FOCUS:-1}" = "1" ] && $IS_MAC; }
+
+# Which browser to bring forward. Override with OSWALD_BROWSER="Google Chrome",
+# otherwise detect the system default browser.
+browser_app() {
+  if [ -n "${OSWALD_BROWSER:-}" ]; then echo "$OSWALD_BROWSER"; return; fi
+  local name
+  name=$(osascript 2>/dev/null <<'OSA'
+use framework "AppKit"
+use scripting additions
+set theURL to current application's |NSURL|'s URLWithString:"https://example.com"
+set theApp to current application's |NSWorkspace|'s sharedWorkspace()'s URLForApplicationToOpenURL:theURL
+if theApp is missing value then return ""
+return (theApp's lastPathComponent()) as text
+OSA
+)
+  name="${name%.app}"
+  [ -z "$name" ] && name="Safari"
+  echo "$name"
+}
+
+# Remember the terminal that's frontmost right now (called at prompt-submit time,
+# when you've just hit Enter, so the terminal is in front).
+record_terminal() {
+  focus_on || return 0
+  local name
+  name=$(osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null)
+  if [ -n "$name" ]; then
+    mkdir -p "$OSWALD_DATA_DIR"
+    printf '%s' "$name" > "$TERM_FILE"
+  fi
+}
+
+# Bring the player's browser to the front (so you watch Oswald while AI works).
+focus_browser() {
+  focus_on || return 0
+  local app; app="$(browser_app)"
+  [ -n "$app" ] && osascript -e "tell application \"$app\" to activate" >/dev/null 2>&1 || true
+}
+
+# Return focus to the terminal we recorded (so you're back at the prompt).
+focus_terminal() {
+  focus_on || return 0
+  local name; name=$(cat "$TERM_FILE" 2>/dev/null)
+  [ -n "$name" ] && osascript -e "tell application \"System Events\" to set frontmost of process \"$name\" to true" >/dev/null 2>&1 || true
 }

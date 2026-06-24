@@ -82,6 +82,16 @@ rm -f "$DATA/disabled"
 OSWALD_PORT="$PORT" OSWALD_DATA_DIR="$DATA" OSWALD_OPEN_BROWSER=0 bash "$ROOT/claude-plugin/hooks/play.sh"
 check "plays again once re-enabled"  '"playing":true'  "$(curl -s $URL/state)"
 
+echo "6) Focus flags work and don't break the hooks"
+OSWALD_PORT="$PORT" OSWALD_DATA_DIR="$DATA" OSWALD_OPEN_BROWSER=0 bash "$ROOT/claude-plugin/hooks/play.sh" --focus
+rc_play=$?
+check "play.sh --focus exits 0"      '0'               "$rc_play"
+check "play.sh --focus still plays"  '"playing":true'  "$(curl -s $URL/state)"
+OSWALD_PORT="$PORT" OSWALD_DATA_DIR="$DATA" bash "$ROOT/claude-plugin/hooks/pause.sh" --focus
+rc_pause=$?
+check "pause.sh --focus exits 0"     '0'               "$rc_pause"
+check "pause.sh --focus still pauses" '"playing":false' "$(curl -s $URL/state)"
+
 echo
 echo "-----------------------------------------"
 green "PASSED: $PASS"
